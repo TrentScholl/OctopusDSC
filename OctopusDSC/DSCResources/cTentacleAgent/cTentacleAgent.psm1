@@ -12,6 +12,7 @@ function Get-TargetResource
         [ValidateSet("Started", "Stopped")]
         [string]$State = "Started",
         
+        [string]$ProxyAddress,
         [string]$ApiKey,
         [string]$OctopusServerUrl,
         [string[]]$Environments,
@@ -70,7 +71,8 @@ function Set-TargetResource
 
         [ValidateSet("Started", "Stopped")]
         [string]$State = "Started",
-        
+
+        [string]$ProxyAddress,
         [string]$ApiKey,
         [string]$OctopusServerUrl,
         [string[]]$Environments,
@@ -151,6 +153,7 @@ function Test-TargetResource
         [ValidateSet("Started", "Stopped")]
         [string]$State = "Started",
         
+        [string]$ProxyAddress,
         [string]$ApiKey,
         [string]$OctopusServerUrl,
         [string[]]$Environments,
@@ -199,8 +202,15 @@ function Request-File
         [string]$saveAs
     )
  
-    Write-Host "Downloading $url to $saveAs"
-    $downloader = new-object System.Net.WebClient
+    Write-Verbose "Downloading $url to $saveAs"
+    $downloader = New-Object System.Net.WebClient
+
+    if ($ProxyAddress)
+    {
+        $WebProxy = New-Object System.Net.WebProxy($ProxyAddress,$true)
+        $downloader.Proxy = $WebProxy
+    }
+
     $downloader.DownloadFile($url, $saveAs)
 }
 
@@ -220,8 +230,23 @@ function Invoke-AndAssert {
 function Get-MyPublicIPAddress
 {
     Write-Verbose "Getting public IP address"
-    $downloader = new-object System.Net.WebClient
+    $downloader = New-Object System.Net.WebClient
+    
+    if ($ProxyAddress)
+    {
+        $WebProxy = New-Object System.Net.WebProxy($ProxyAddress,$true)
+        $downloader.Proxy = $WebProxy
+    }
+
     $ip = $downloader.DownloadString("http://ifconfig.me/ip")
+    return $ip
+}
+
+function Get-MyPrivateIPAddress
+{
+    Write-Verbose "Getting private IP address"
+
+    $ip = (Get-NetAdapter | Get-NetIPAddress | ? AddressFamily -eq 'IPv4').IPAddress
     return $ip
 }
  
@@ -276,10 +301,10 @@ function New-Tentacle
     Write-Verbose "Open port $port on Windows Firewall"
     Invoke-AndAssert { & netsh.exe advfirewall firewall add rule protocol=TCP dir=in localport=$port action=allow name="Octopus Tentacle: $Name" }
     
-    $ipAddress = Get-MyPublicIPAddress
+    $ipAddress = Get-MyPrivateIPAddress
     $ipAddress = $ipAddress.Trim()
  
-    Write-Verbose "Public IP address: $ipAddress"
+    Write-Verbose "Private IP address: $ipAddress"
     Write-Verbose "Configuring and registering Tentacle"
   
     pushd "${env:ProgramFiles}\Octopus Deploy\Tentacle"
